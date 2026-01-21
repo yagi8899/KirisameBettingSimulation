@@ -13,7 +13,7 @@ from betting_simulation.data_loader import DataLoader
 from betting_simulation.evaluator import BetEvaluator
 from betting_simulation.fund_manager import FundManagerFactory
 from betting_simulation.race_filter import RaceFilter
-from betting_simulation.simulation_engine import SimulationEngine
+from betting_simulation.simulation_engine import SimulationEngine, StrategyComparator
 from betting_simulation.strategy import StrategyFactory
 
 # ロギング設定
@@ -180,6 +180,241 @@ def init_config(output_path: str) -> None:
     
     ConfigLoader.save(config, output_path)
     click.echo(f"Sample configuration saved to: {output_path}")
+
+
+@main.command("compare")
+@click.argument("config_paths", nargs=-1, type=click.Path(exists=True), required=True)
+@click.option(
+    "--output", "-o",
+    type=click.Path(),
+    help="結果を保存するJSONファイルパス"
+)
+@click.option(
+    "--csv", "-c",
+    type=click.Path(),
+    help="結果を保存するCSVファイルパス"
+)
+@click.option(
+    "--sort-by", "-s",
+    type=click.Choice(["roi", "hit_rate", "profit", "drawdown"]),
+    default="roi",
+    help="ソート基準（デフォルト: roi）"
+)
+@click.option(
+    "--walk-forward", "-w",
+    is_flag=True,
+    help="Walk-Forwardシミュレーションを使用"
+)
+@click.option(
+    "--window-size", "-ws",
+    type=int,
+    default=100,
+    help="Walk-Forwardのウィンドウサイズ（デフォルト: 100）"
+)
+@click.option(
+    "--step-size", "-ss",
+    type=int,
+    default=50,
+    help="Walk-Forwardのステップサイズ（デフォルト: 50）"
+)
+def compare(
+    config_paths: tuple,
+    output: str | None,
+    csv: str | None,
+    sort_by: str,
+    walk_forward: bool,
+    window_size: int,
+    step_size: int
+) -> None:
+    """複数の戦略を比較
+    
+    CONFIG_PATHS: 比較する設定ファイル（YAML）のパス（複数指定可）
+    
+    例: betting-sim compare config1.yaml config2.yaml config3.yaml
+    """
+    try:
+        if len(config_paths) < 2:
+            click.echo("Error: At least 2 config files are required for comparison", err=True)
+            sys.exit(1)
+        
+        # 設定ファイルを読み込み
+        configs = []
+        for path in config_paths:
+            config = ConfigLoader.load(path)
+            configs.append(config)
+            click.echo(f"Loaded: {path} (strategy: {config.strategy_name})")
+        
+        # 共通のデータを読み込み（最初の設定のdata_pathを使用）
+        base_config = configs[0]
+        click.echo(f"\nLoading data from: {base_config.data_path}")
+        loader = DataLoader()
+        races = loader.load(base_config.data_path)
+        click.echo(f"Loaded {len(races)} races")
+        
+        # レースフィルタリング
+        filter_instance = RaceFilter(base_config.filter_condition)
+        filtered_races = filter_instance.filter(races)
+        click.echo(f"Filtered to {len(filtered_races)} races")
+        
+        if not filtered_races:
+            click.echo("Error: No races match the filter criteria", err=True)
+            sys.exit(1)
+        
+        # 戦略比較を実行
+        click.echo("\nComparing strategies...")
+        comparator = StrategyComparator()
+        
+        # 戦略リストを作成
+        strategies = []
+        for config in configs:
+            strategy = StrategyFactory.create(config.strategy_name, config.strategy_params)
+            fund_manager = FundManagerFactory.create(config.fund_manager_name, config.fund_manager_params)
+            strategies.append((config.strategy_name, strategy, fund_manager))
+        
+        results = comparator.compare(
+            filtered_races,
+            strategies,
+            base_config.initial_fund
+        )
+        
+        # 結果をソート
+        sort_key_map = {
+            "roi": lambda x: x.metrics.roi,
+            "hit_rate": lambda x: x.metrics.hit_rate,
+            "profit": lambda x: x.profit,
+            "drawdown": lambda x: -x.metrics.max_drawdown  # 低いほうが良い
+        }
+        sorted_results = sorted(
+            results.items(),
+            key=lambda x: sort_key_map[sort_by](x[1]),
+            reverse=True
+        )
+        
+        # 結果を表示
+        _print_comparison_result(sorted_results, sort_by, walk_forward)
+        
+        # サマリー統計
+        summary_list = comparator.compare_summary(results)
+        _print_comparison_summary_list(summary_list)
+        
+        # 結果を保存
+        if output:
+            _save_comparison_result(sorted_results, output)
+        
+        if csv:
+            _save_comparison_csv(sorted_results, csv)
+        
+        click.echo("\nComparison completed!")
+        
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        logger.exception("Comparison failed")
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+def _print_comparison_result(sorted_results: list, sort_by: str, is_walk_forward: bool) -> None:
+    """比較結果を表示"""
+    mode = "Walk-Forward" if is_walk_forward else "Simple"
+    click.echo(f"\n{'=' * 80}")
+    click.echo(f"Strategy Comparison Results ({mode} Mode, sorted by {sort_by})")
+    click.echo("=" * 80)
+    
+    # ヘッダー
+    click.echo(f"{'Rank':<5} {'Strategy':<20} {'Hit%':<8} {'ROI%':<10} {'Profit':<12} {'DD%':<8} {'Go?':<6}")
+    click.echo("-" * 80)
+    
+    for rank, (name, result) in enumerate(sorted_results, 1):
+        m = result.metrics
+        go_status = click.style("GO", fg="green") if m.is_go else click.style("NO", fg="red")
+        
+        click.echo(
+            f"{rank:<5} {name:<20} {m.hit_rate:<8.2f} {m.roi:<10.2f} "
+            f"{result.profit:<+12,} {m.max_drawdown:<8.2f} {go_status}"
+        )
+    
+    click.echo("=" * 80)
+
+
+def _print_comparison_summary_list(summary_list: list[dict]) -> None:
+    """比較サマリーを表示（リスト形式）"""
+    click.echo("\n" + "-" * 40)
+    click.echo("Summary Statistics")
+    click.echo("-" * 40)
+    
+    if not summary_list:
+        click.echo("No results to summarize")
+        return
+    
+    # 各指標のベストを計算
+    best_roi = max(summary_list, key=lambda x: x["roi"])
+    best_hit = max(summary_list, key=lambda x: x["hit_rate"])
+    lowest_dd = min(summary_list, key=lambda x: x["max_drawdown"])
+    go_count = sum(1 for s in summary_list if s["is_go"])
+    
+    click.echo(f"Best ROI:      {best_roi['name']} ({best_roi['roi']:.2f}%)")
+    click.echo(f"Best Hit Rate: {best_hit['name']} ({best_hit['hit_rate']:.2f}%)")
+    click.echo(f"Lowest DD:     {lowest_dd['name']} ({lowest_dd['max_drawdown']:.2f}%)")
+    click.echo(f"GO strategies: {go_count} / {len(summary_list)}")
+    click.echo("-" * 40)
+
+
+def _save_comparison_result(sorted_results: list, output_path: str) -> None:
+    """比較結果をJSONで保存"""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    data = []
+    for name, result in sorted_results:
+        data.append({
+            "strategy": name,
+            "initial_fund": result.initial_fund,
+            "final_fund": result.final_fund,
+            "profit": result.profit,
+            "metrics": {
+                "total_races": result.metrics.total_races,
+                "total_bets": result.metrics.total_bets,
+                "total_hits": result.metrics.total_hits,
+                "hit_rate": result.metrics.hit_rate,
+                "roi": result.metrics.roi,
+                "max_drawdown": result.metrics.max_drawdown,
+                "max_consecutive_losses": result.metrics.max_consecutive_losses,
+                "is_go": result.metrics.is_go,
+            }
+        })
+    
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    click.echo(f"Comparison result saved to: {output_path}")
+
+
+def _save_comparison_csv(sorted_results: list, output_path: str) -> None:
+    """比較結果をCSVで保存"""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    import csv as csv_module
+    
+    with open(output_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv_module.writer(f)
+        writer.writerow([
+            "Rank", "Strategy", "Initial", "Final", "Profit",
+            "Races", "Bets", "Hits", "HitRate%", "ROI%", "MaxDD%", "MaxLossStreak", "IsGo"
+        ])
+        
+        for rank, (name, result) in enumerate(sorted_results, 1):
+            m = result.metrics
+            writer.writerow([
+                rank, name, result.initial_fund, result.final_fund, result.profit,
+                m.total_races, m.total_bets, m.total_hits,
+                f"{m.hit_rate:.2f}", f"{m.roi:.2f}", f"{m.max_drawdown:.2f}",
+                m.max_consecutive_losses, "GO" if m.is_go else "NO-GO"
+            ])
+    
+    click.echo(f"Comparison result saved to: {output_path}")
 
 
 def _print_simple_result(result) -> None:

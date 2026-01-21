@@ -317,3 +317,106 @@ class SimulationEngine:
         mc_result.profit_rate = float(np.sum(funds_array > initial_fund) / num_trials * 100)
         
         return mc_result
+    
+    def run_walk_forward(
+        self,
+        races: list[Race],
+        initial_fund: int,
+        window_size: int = 100,
+        step_size: int = 50
+    ) -> list[SimulationResult]:
+        """Walk-Forwardシミュレーションを実行
+        
+        時系列順にウィンドウをスライドさせてシミュレーション。
+        
+        Args:
+            races: レースリスト（時系列順）
+            initial_fund: 初期資金
+            window_size: ウィンドウサイズ（レース数）
+            step_size: ステップサイズ（レース数）
+            
+        Returns:
+            各ウィンドウのシミュレーション結果リスト
+        """
+        results = []
+        
+        # レースを時系列順にソート
+        sorted_races = sorted(races, key=lambda r: (r.year, r.kaisai_date, r.race_number))
+        
+        start = 0
+        while start + window_size <= len(sorted_races):
+            window_races = sorted_races[start:start + window_size]
+            result = self.run_simple(window_races, initial_fund)
+            results.append(result)
+            
+            logger.info(f"Walk-forward window {len(results)}: "
+                       f"ROI={result.metrics.roi:.2f}%, "
+                       f"Hit={result.metrics.hit_rate:.2f}%")
+            
+            start += step_size
+        
+        return results
+
+
+class StrategyComparator:
+    """戦略比較クラス"""
+    
+    def __init__(self, evaluator: BetEvaluator | None = None) -> None:
+        self.evaluator = evaluator or BetEvaluator()
+    
+    def compare(
+        self,
+        races: list[Race],
+        strategies: list[tuple[str, Strategy, FundManager]],
+        initial_fund: int
+    ) -> dict[str, SimulationResult]:
+        """複数戦略を比較
+        
+        Args:
+            races: レースリスト
+            strategies: (名前, 戦略, 資金管理)のリスト
+            initial_fund: 初期資金
+            
+        Returns:
+            {戦略名: シミュレーション結果}
+        """
+        results = {}
+        
+        for name, strategy, fund_manager in strategies:
+            logger.info(f"Running strategy: {name}")
+            engine = SimulationEngine(strategy, fund_manager, self.evaluator)
+            result = engine.run_simple(races, initial_fund)
+            results[name] = result
+        
+        return results
+    
+    def compare_summary(self, results: dict[str, SimulationResult]) -> list[dict]:
+        """比較結果のサマリーを作成"""
+        summary = []
+        
+        for name, result in results.items():
+            metrics = result.metrics
+            summary.append({
+                "name": name,
+                "initial_fund": result.initial_fund,
+                "final_fund": result.final_fund,
+                "profit": result.profit,
+                "roi": metrics.roi,
+                "hit_rate": metrics.hit_rate,
+                "total_bets": metrics.total_bets,
+                "total_hits": metrics.total_hits,
+                "max_drawdown": metrics.max_drawdown,
+                "max_consecutive_losses": metrics.max_consecutive_losses,
+                "sharpe_ratio": metrics.sharpe_ratio,
+                "is_go": metrics.is_go,
+            })
+        
+        # ROI順にソート
+        summary.sort(key=lambda x: x["roi"], reverse=True)
+        
+        return summary
+    
+    def rank_strategies(self, results: dict[str, SimulationResult]) -> list[str]:
+        """戦略をランキング（ROI順）"""
+        summary = self.compare_summary(results)
+        return [s["name"] for s in summary]

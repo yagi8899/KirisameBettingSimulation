@@ -55,19 +55,27 @@ class SimulationConfig:
         if "filter" in data:
             config.filter_condition = FilterCondition.from_dict(data["filter"])
         
-        # 戦略設定
+        # 戦略設定（2つの形式をサポート）
+        # 形式1: strategy_name / strategy_params（フラット形式）
+        # 形式2: strategy.name / strategy.params（ネスト形式）
         if "strategy" in data:
             strategy = data["strategy"]
             config.strategy_name = strategy.get("name", "favorite_win")
             config.strategy_params = strategy.get("params", {})
+        elif "strategy_name" in data:
+            config.strategy_name = data.get("strategy_name", "favorite_win")
+            config.strategy_params = data.get("strategy_params", {})
         
-        # 資金管理設定
+        # 資金管理設定（2つの形式をサポート）
         if "fund_manager" in data:
             fm = data["fund_manager"]
             config.fund_manager_name = fm.get("name", "fixed")
             config.fund_manager_params = fm.get("params", {})
             if "constraints" in fm:
                 config.fund_constraints = FundConstraints.from_dict(fm["constraints"])
+        elif "fund_manager_name" in data:
+            config.fund_manager_name = data.get("fund_manager_name", "fixed")
+            config.fund_manager_params = data.get("fund_manager_params", {})
         
         # モンテカルロ設定
         if "monte_carlo" in data:

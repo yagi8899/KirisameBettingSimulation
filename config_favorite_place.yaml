@@ -1,0 +1,11 @@
+# 複勝本命戦略（1番人気）設定
+data_path: "tsv/predicted_results_all.tsv"
+strategy_name: "favorite_place"
+strategy_params:
+  top_n: 1
+
+fund_manager_name: "fixed"
+fund_manager_params:
+  bet_amount: 1000
+
+initial_fund: 100000

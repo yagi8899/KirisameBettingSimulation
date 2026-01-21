@@ -1,0 +1,13 @@
+# バリュー単勝戦略設定
+data_path: "tsv/predicted_results_all.tsv"
+strategy_name: "value_win"
+strategy_params:
+  min_odds: 3.0
+  max_odds: 20.0
+  top_n: 3
+
+fund_manager_name: "fixed"
+fund_manager_params:
+  bet_amount: 1000
+
+initial_fund: 100000

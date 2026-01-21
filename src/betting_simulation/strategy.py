@@ -336,6 +336,153 @@ class FlowTrioStrategy(Strategy):
         return tickets
 
 
+class WheelQuinellaStrategy(Strategy):
+    """ホイール馬連戦略
+    
+    軸馬1頭から全相手馬への馬連を購入する。
+    """
+    
+    name = "wheel_quinella"
+    description = "軸馬1頭から相手全頭への馬連を購入"
+    
+    def generate_tickets(self, race: Race) -> list[Ticket]:
+        num_axis = self._get_param("num_axis", 1)
+        exclude_low_odds = self._get_param("exclude_low_odds", 0)  # 除外する低オッズ馬数
+        
+        tickets = []
+        top_horses = race.get_top_predicted(num_axis)
+        
+        if not top_horses:
+            return []
+        
+        # 相手馬（軸馬以外の全馬）
+        axis_numbers = {h.number for h in top_horses}
+        partners = [h for h in race.horses if h.number not in axis_numbers]
+        
+        # 低オッズ馬を除外
+        if exclude_low_odds > 0:
+            partners = sorted(partners, key=lambda h: h.odds)[exclude_low_odds:]
+        
+        for axis in top_horses:
+            for partner in partners:
+                ticket = Ticket(
+                    ticket_type=TicketType.QUINELLA,
+                    horse_numbers=(axis.number, partner.number),
+                )
+                tickets.append(ticket)
+        
+        return tickets
+
+
+class FormationTrioStrategy(Strategy):
+    """フォーメーション三連複戦略
+    
+    1列目、2列目、3列目を指定して三連複を購入する。
+    """
+    
+    name = "formation_trio"
+    description = "フォーメーション三連複を購入"
+    
+    def generate_tickets(self, race: Race) -> list[Ticket]:
+        first_n = self._get_param("first_n", 2)  # 1列目の頭数
+        second_n = self._get_param("second_n", 4)  # 2列目の頭数
+        third_n = self._get_param("third_n", 6)  # 3列目の頭数
+        
+        tickets = []
+        top_horses = race.get_top_predicted(max(first_n, second_n, third_n))
+        
+        if len(top_horses) < 3:
+            return []
+        
+        first = [h.number for h in top_horses[:first_n]]
+        second = [h.number for h in top_horses[:second_n]]
+        third = [h.number for h in top_horses[:third_n]]
+        
+        # 全組み合わせを生成（重複除去）
+        seen = set()
+        for h1 in first:
+            for h2 in second:
+                for h3 in third:
+                    if h1 != h2 and h2 != h3 and h1 != h3:
+                        combo = tuple(sorted([h1, h2, h3]))
+                        if combo not in seen:
+                            seen.add(combo)
+                            ticket = Ticket(
+                                ticket_type=TicketType.TRIO,
+                                horse_numbers=combo,
+                            )
+                            tickets.append(ticket)
+        
+        return tickets
+
+
+# =============================================================================
+# 穴馬戦略
+# =============================================================================
+
+class HoleHorseWinStrategy(Strategy):
+    """穴馬単勝戦略
+    
+    穴馬確率が高い馬の単勝を購入する。
+    """
+    
+    name = "hole_win"
+    description = "穴馬確率が高い馬の単勝を購入"
+    
+    def generate_tickets(self, race: Race) -> list[Ticket]:
+        min_hole_prob = self._get_param("min_hole_probability", 0.3)
+        max_tickets = self._get_param("max_tickets", 2)
+        min_odds = self._get_param("min_odds", 5.0)
+        
+        tickets = []
+        
+        # 穴馬確率でソート
+        candidates = [h for h in race.horses 
+                      if h.hole_probability >= min_hole_prob and h.odds >= min_odds]
+        candidates.sort(key=lambda h: h.hole_probability, reverse=True)
+        
+        for horse in candidates[:max_tickets]:
+            ticket = Ticket(
+                ticket_type=TicketType.WIN,
+                horse_numbers=(horse.number,),
+                odds=horse.odds,
+                expected_value=horse.hole_probability * horse.odds
+            )
+            tickets.append(ticket)
+        
+        return tickets
+
+
+class HoleHorsePlaceStrategy(Strategy):
+    """穴馬複勝戦略
+    
+    穴馬確率が高い馬の複勝を購入する。
+    """
+    
+    name = "hole_place"
+    description = "穴馬確率が高い馬の複勝を購入"
+    
+    def generate_tickets(self, race: Race) -> list[Ticket]:
+        min_hole_prob = self._get_param("min_hole_probability", 0.2)
+        max_tickets = self._get_param("max_tickets", 3)
+        
+        tickets = []
+        
+        candidates = [h for h in race.horses if h.hole_probability >= min_hole_prob]
+        candidates.sort(key=lambda h: h.hole_probability, reverse=True)
+        
+        for horse in candidates[:max_tickets]:
+            estimated_odds = max(1.1, horse.odds / 3)
+            ticket = Ticket(
+                ticket_type=TicketType.PLACE,
+                horse_numbers=(horse.number,),
+                odds=estimated_odds,
+            )
+            tickets.append(ticket)
+        
+        return tickets
+
+
 # =============================================================================
 # 戦略ファクトリー
 # =============================================================================
@@ -350,9 +497,13 @@ class StrategyFactory:
         "favorite_place": FavoritePlaceStrategy,
         "box_quinella": BoxQuinellaStrategy,
         "flow_quinella": FlowQuinellaStrategy,
+        "wheel_quinella": WheelQuinellaStrategy,
         "box_wide": BoxWideStrategy,
         "box_trio": BoxTrioStrategy,
         "flow_trio": FlowTrioStrategy,
+        "formation_trio": FormationTrioStrategy,
+        "hole_win": HoleHorseWinStrategy,
+        "hole_place": HoleHorsePlaceStrategy,
     }
     
     @classmethod
