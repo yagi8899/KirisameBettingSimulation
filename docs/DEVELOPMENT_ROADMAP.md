@@ -147,10 +147,19 @@ Week 1-2    Week 3-4    Week 5-6    Week 7-8    Week 9-10   Week 11-12
 - JSON/CSV/TXTレポート出力
 
 ### マイルストーン判定基準
-- [ ] 全39種のグラフが生成可能
-- [ ] Jupyter Notebookで対話的分析が可能
-- [ ] グラフ生成が30秒以内で完了
-- [ ] レポートがファイル出力される
+- [x] 全33種のグラフが生成可能
+- [x] Jupyter Notebookで対話的分析が可能
+- [x] グラフ生成が30秒以内で完了
+- [x] レポートがファイル出力される
+
+**Phase 3 完了: 2026-01-21** ✅
+
+### 実装済みグラフ（33種）
+- FundChartGenerator: basic, with_ma, with_target, multi_strategy, heatmap, daily
+- ProfitChartGenerator: roi_trend, hit_rate_trend, cumulative, roi_histogram, monthly, by_track, win_loss_dist, roi_boxplot
+- RiskChartGenerator: drawdown, streak, volatility, risk_return, var, sharpe
+- StrategyChartGenerator: performance, risk, timeline, sensitivity, correlation
+- MonteCarloChartGenerator: distribution, confidence, bankruptcy, target, extremes, percentile, convergence, scenario
 
 ---
 
@@ -184,10 +193,20 @@ Week 1-2    Week 3-4    Week 5-6    Week 7-8    Week 9-10   Week 11-12
 - グラフ・レポートのダウンロード機能
 
 ### マイルストーン判定基準
-- [ ] `streamlit run` でダッシュボード起動
-- [ ] ファイルアップロードでデータ読込
-- [ ] スライダー操作でパラメータ調整
-- [ ] 結果のダウンロードが可能
+- [x] `streamlit run` でダッシュボード起動
+- [x] ファイルアップロードでデータ読込
+- [x] スライダー操作でパラメータ調整
+- [x] 結果のダウンロードが可能
+
+**Phase 4 完了: 2026-01-21** ✅
+
+### 実装済みダッシュボード（6ページ）
+- 📊 サマリーページ: メトリクスカード、資金推移、賭け履歴
+- 💰 資金推移ページ: 移動平均/目標ライン/ドローダウン、日別・競馬場別分析
+- 📈 収益分析ページ: ROI/的中率推移、条件別分析
+- ⚠️ リスク分析ページ: ドローダウン、連敗分析、VaR/CVaR
+- 🔄 戦略比較ページ: 複数戦略比較、モンテカルロ
+- ⚙️ 設定ページ: 戦略設定UI、エクスポート、設定ファイル管理
 
 ---
 
