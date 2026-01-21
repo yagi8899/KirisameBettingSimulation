@@ -1,0 +1,49 @@
+# 競馬賭けシミュレーション設定ファイル
+
+# 初期資金（円）
+initial_fund: 100000
+
+# データファイルパス
+data_path: tsv/predicted_results_all.tsv
+
+# フィルター条件
+filter:
+  tracks: []  # 空=全競馬場、例: ["東京", "中山", "阪神", "京都"]
+  surfaces: []  # 空=全て、例: ["芝", "ダート"]
+  min_distance: 0
+  max_distance: 99999
+  years: []  # 空=全年、例: [2023, 2024]
+  race_numbers: []  # 空=全レース、例: [10, 11, 12]
+  min_horses: 0
+  max_horses: 99
+
+# 戦略設定
+strategy:
+  name: favorite_win  # 戦略名
+  params:
+    top_n: 1  # 予測上位何頭に賭けるか
+    min_odds: 1.0  # 最小オッズ
+    max_odds: 999.0  # 最大オッズ
+
+# 資金管理設定
+fund_manager:
+  name: fixed  # fixed, percentage, kelly
+  params:
+    bet_amount: 1000  # 固定賭け金
+  constraints:
+    min_bet: 100  # 最小賭け金
+    max_bet_per_ticket: 10000  # 1馬券あたり最大
+    max_bet_per_race: 50000  # 1レースあたり最大
+    max_bet_ratio: 0.1  # 資金に対する最大比率
+    bet_unit: 100  # 賭け金単位
+
+# モンテカルロ設定
+monte_carlo:
+  trials: 10000
+  random_seed: null  # nullでランダム、数値で再現性確保
+
+# 出力設定
+output:
+  dir: output
+  format:
+    - json
