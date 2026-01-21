@@ -523,5 +523,28 @@ def _save_monte_carlo_result(result, output_path: str) -> None:
     click.echo(f"Result saved to: {output_path}")
 
 
+@main.command()
+@click.option("--port", "-p", default=8501, help="サーバーポート番号")
+def dashboard(port: int) -> None:
+    """Streamlitダッシュボードを起動
+    
+    ブラウザで対話的にシミュレーションを実行・分析できます。
+    """
+    import subprocess
+    
+    app_path = Path(__file__).parent / "dashboard" / "app.py"
+    
+    click.echo("🏇 競馬シミュレーターダッシュボードを起動中...")
+    click.echo(f"   URL: http://localhost:{port}")
+    click.echo("   終了するには Ctrl+C を押してください")
+    
+    subprocess.run([
+        sys.executable, "-m", "streamlit", "run",
+        str(app_path),
+        "--server.port", str(port),
+        "--server.headless", "true",
+    ])
+
+
 if __name__ == "__main__":
     main()
