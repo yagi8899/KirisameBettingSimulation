@@ -170,22 +170,74 @@ def _render_summary_table(result: SimulationResult):
 
 def _render_bet_history(result: SimulationResult):
     """賭け履歴を表示"""
-    st.subheader("📜 賭け履歴（最新20件）")
+    st.subheader("📜 賭け履歴")
     
     if not result.bet_history:
         st.info("賭け履歴がありません")
         return
     
-    # 最新20件を取得
-    recent_bets = result.bet_history[-20:][::-1]
+    # 競馬場、開催年、開催日、レース番号の昇順でソート
+    sorted_bets = sorted(
+        result.bet_history,
+        key=lambda b: (b.race.track, b.race.year, b.race.kaisai_date, b.race.race_number)
+    )
+    
+    # ページネーション設定
+    items_per_page = st.selectbox(
+        "表示件数",
+        [20, 50, 100, "全件"],
+        index=0,
+        key="bet_history_page_size"
+    )
+    
+    if items_per_page == "全件":
+        display_bets = sorted_bets
+        total_pages = 1
+        current_page = 1
+    else:
+        total_pages = (len(sorted_bets) + items_per_page - 1) // items_per_page
+        current_page = st.number_input(
+            f"ページ (全{total_pages}ページ, {len(sorted_bets)}件)",
+            min_value=1,
+            max_value=max(1, total_pages),
+            value=1,
+            key="bet_history_page"
+        )
+        start_idx = (current_page - 1) * items_per_page
+        end_idx = start_idx + items_per_page
+        display_bets = sorted_bets[start_idx:end_idx]
     
     data = []
-    for bet in recent_bets:
+    for bet in display_bets:
+        # 馬名を取得
+        horse_names = []
+        for num in bet.ticket.horse_numbers:
+            horse = bet.race.get_horse_by_number(num)
+            if horse:
+                horse_names.append(horse.name.strip())
+            else:
+                horse_names.append(f"#{num}")
+        
+        # 的中時のオッズを取得
+        if bet.is_hit and bet.ticket.amount > 0:
+            actual_odds = bet.payout / bet.ticket.amount
+        else:
+            actual_odds = bet.ticket.odds if bet.ticket.odds > 0 else 0
+        
+        # 開催日をyyyy/MM/dd形式に変換（kaisai_dateはMMDD形式）
+        kaisai = bet.race.kaisai_date
+        month = kaisai // 100
+        day = kaisai % 100
+        date_str = f"{bet.race.year}/{month:02d}/{day:02d}"
+        
         data.append({
-            "レース": f"{bet.race.track} {bet.race.race_number}R",
+            "競馬場": bet.race.track,
+            "開催日": date_str,
+            "R": bet.race.race_number,
             "馬券種": bet.ticket.ticket_type.value,
             "馬番": str(bet.ticket.horse_numbers),
-            "オッズ": f"{bet.ticket.odds:.1f}",
+            "馬名": ", ".join(horse_names),
+            "オッズ": f"{actual_odds:.1f}" if actual_odds > 0 else "-",
             "金額": f"¥{bet.ticket.amount:,}",
             "結果": "✅ 的中" if bet.is_hit else "❌ 不的中",
             "払戻": f"¥{bet.payout:,}",

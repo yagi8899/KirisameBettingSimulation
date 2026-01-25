@@ -137,6 +137,31 @@ class Race:
         """実際の着順上位n頭を取得"""
         sorted_horses = sorted(self.horses, key=lambda h: h.actual_rank)
         return sorted_horses[:n]
+    
+    def has_duplicate_predicted_rank(self, up_to_rank: int) -> bool:
+        """指定順位までに予測順位の重複があるかチェック
+        
+        Args:
+            up_to_rank: チェックする順位の上限（この順位まで重複をチェック）
+            
+        Returns:
+            重複がある場合True
+        """
+        ranks = [h.predicted_rank for h in self.horses if h.predicted_rank <= up_to_rank]
+        return len(ranks) != len(set(ranks))
+    
+    def get_top_predicted_safe(self, n: int = 1) -> list[Horse] | None:
+        """予測上位n頭を取得（重複がある場合はNone）
+        
+        Args:
+            n: 取得する頭数
+            
+        Returns:
+            予測上位n頭のリスト、または重複がある場合はNone
+        """
+        if self.has_duplicate_predicted_rank(n):
+            return None
+        return self.get_top_predicted(n)
 
 
 @dataclass

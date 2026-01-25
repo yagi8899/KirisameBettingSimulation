@@ -4,6 +4,7 @@ import streamlit as st
 from pathlib import Path
 from typing import Optional
 import sys
+import pickle
 
 # パス設定
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -15,24 +16,55 @@ from betting_simulation.strategy import StrategyFactory
 from betting_simulation.fund_manager import FundManagerFactory
 from betting_simulation.models import SimulationResult
 
+# キャッシュディレクトリ
+CACHE_DIR = Path(__file__).parent / ".cache"
+RACES_CACHE_FILE = CACHE_DIR / "races.pkl"
+
 
 def init_session_state():
     """セッション状態を初期化"""
     if "config" not in st.session_state:
         st.session_state.config = None
     if "races" not in st.session_state:
-        st.session_state.races = None
+        # キャッシュからデータを復元
+        st.session_state.races = load_races_from_cache()
     if "result" not in st.session_state:
         st.session_state.result = None
     if "comparison_results" not in st.session_state:
         st.session_state.comparison_results = None
 
 
+def save_races_to_cache(races) -> bool:
+    """レースデータをキャッシュに保存"""
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(RACES_CACHE_FILE, "wb") as f:
+            pickle.dump(races, f)
+        return True
+    except Exception as e:
+        st.warning(f"キャッシュ保存エラー: {e}")
+        return False
+
+
+def load_races_from_cache():
+    """キャッシュからレースデータを読み込み"""
+    if RACES_CACHE_FILE.exists():
+        try:
+            with open(RACES_CACHE_FILE, "rb") as f:
+                return pickle.load(f)
+        except Exception:
+            return None
+    return None
+
+
 def load_data(file_path: Path) -> bool:
     """データを読み込む"""
     try:
         loader = DataLoader()
-        st.session_state.races = loader.load(file_path)
+        races = loader.load(file_path)
+        st.session_state.races = races
+        # キャッシュに保存
+        save_races_to_cache(races)
         return True
     except Exception as e:
         st.error(f"データ読み込みエラー: {e}")
@@ -52,21 +84,27 @@ def run_simulation() -> Optional[SimulationResult]:
     try:
         config = st.session_state.config
         strategy = StrategyFactory.create(
-            config.strategy.name,
-            **config.strategy.params
+            config.strategy_name,
+            config.strategy_params
         )
         fund_manager = FundManagerFactory.create(
-            config.fund.method,
-            **config.fund.params
+            config.fund_manager_name,
+            config.fund_manager_params
         )
         
         engine = SimulationEngine(
             strategy=strategy,
             fund_manager=fund_manager,
-            initial_fund=config.initial_fund,
         )
         
-        result = engine.run(st.session_state.races)
+        # 破産ラインを計算
+        bankruptcy_threshold = int(config.initial_fund * config.bankruptcy_ratio)
+        
+        result = engine.run_simple(
+            st.session_state.races, 
+            config.initial_fund,
+            bankruptcy_threshold
+        )
         st.session_state.result = result
         return result
     except Exception as e:
@@ -76,11 +114,24 @@ def run_simulation() -> Optional[SimulationResult]:
 
 def main():
     """メインアプリ"""
+    # Streamlitはデフォルトでホットリロード有効（.pyファイルを保存すると自動リロード）
     st.set_page_config(
         page_title="競馬賭けシミュレーター",
         page_icon="🏇",
         layout="wide",
         initial_sidebar_state="expanded",
+    )
+    
+    # 自動生成されるマルチページナビゲーションを非表示にする
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebarNav"] {
+            display: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
     
     init_session_state()
@@ -128,22 +179,22 @@ def main():
     
     # メインコンテンツ
     if page == "📊 サマリー":
-        from .pages import summary_page
+        from betting_simulation.dashboard.pages import summary_page
         summary_page.render()
     elif page == "💰 資金推移":
-        from .pages import fund_page
+        from betting_simulation.dashboard.pages import fund_page
         fund_page.render()
     elif page == "📈 収益分析":
-        from .pages import profit_page
+        from betting_simulation.dashboard.pages import profit_page
         profit_page.render()
     elif page == "⚠️ リスク分析":
-        from .pages import risk_page
+        from betting_simulation.dashboard.pages import risk_page
         risk_page.render()
     elif page == "🔄 戦略比較":
-        from .pages import strategy_page
+        from betting_simulation.dashboard.pages import strategy_page
         strategy_page.render()
     elif page == "⚙️ 設定":
-        from .pages import settings_page
+        from betting_simulation.dashboard.pages import settings_page
         settings_page.render()
 
 

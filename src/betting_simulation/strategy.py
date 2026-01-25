@@ -59,9 +59,11 @@ class FavoriteWinStrategy(Strategy):
         min_odds = self._get_param("min_odds", 1.0)
         max_odds = self._get_param("max_odds", 999.0)
         
-        tickets = []
-        top_horses = race.get_top_predicted(top_n)
+        top_horses = race.get_top_predicted_safe(top_n)
+        if top_horses is None:
+            return []  # 予測順位に重複があるためスキップ
         
+        tickets = []
         for horse in top_horses:
             if min_odds <= horse.odds <= max_odds:
                 ticket = Ticket(
@@ -156,9 +158,11 @@ class FavoritePlaceStrategy(Strategy):
     def generate_tickets(self, race: Race) -> list[Ticket]:
         top_n = self._get_param("top_n", 1)
         
-        tickets = []
-        top_horses = race.get_top_predicted(top_n)
+        top_horses = race.get_top_predicted_safe(top_n)
+        if top_horses is None:
+            return []  # 予測順位に重複があるためスキップ
         
+        tickets = []
         for horse in top_horses:
             # 複勝オッズは単勝の約1/3と仮定（実際の払戻は別途計算）
             estimated_odds = max(1.1, horse.odds / 3)
@@ -189,9 +193,11 @@ class BoxQuinellaStrategy(Strategy):
     def generate_tickets(self, race: Race) -> list[Ticket]:
         box_size = self._get_param("box_size", 4)
         
-        tickets = []
-        top_horses = race.get_top_predicted(box_size)
+        top_horses = race.get_top_predicted_safe(box_size)
+        if top_horses is None:
+            return []  # 予測順位に重複があるためスキップ
         
+        tickets = []
         if len(top_horses) < 2:
             return []
         
@@ -220,9 +226,11 @@ class FlowQuinellaStrategy(Strategy):
         num_axis = self._get_param("num_axis", 1)  # 軸馬数
         num_partners = self._get_param("num_partners", 5)  # 相手馬数
         
-        tickets = []
-        top_horses = race.get_top_predicted(num_axis + num_partners)
+        top_horses = race.get_top_predicted_safe(num_axis + num_partners)
+        if top_horses is None:
+            return []  # 予測順位に重複があるためスキップ
         
+        tickets = []
         if len(top_horses) < 2:
             return []
         
@@ -256,9 +264,11 @@ class BoxWideStrategy(Strategy):
     def generate_tickets(self, race: Race) -> list[Ticket]:
         box_size = self._get_param("box_size", 4)
         
-        tickets = []
-        top_horses = race.get_top_predicted(box_size)
+        top_horses = race.get_top_predicted_safe(box_size)
+        if top_horses is None:
+            return []  # 予測順位に重複があるためスキップ
         
+        tickets = []
         if len(top_horses) < 2:
             return []
         
@@ -288,9 +298,11 @@ class BoxTrioStrategy(Strategy):
     def generate_tickets(self, race: Race) -> list[Ticket]:
         box_size = self._get_param("box_size", 5)
         
-        tickets = []
-        top_horses = race.get_top_predicted(box_size)
+        top_horses = race.get_top_predicted_safe(box_size)
+        if top_horses is None:
+            return []  # 予測順位に重複があるためスキップ
         
+        tickets = []
         if len(top_horses) < 3:
             return []
         
@@ -316,9 +328,11 @@ class FlowTrioStrategy(Strategy):
     def generate_tickets(self, race: Race) -> list[Ticket]:
         num_partners = self._get_param("num_partners", 6)
         
-        tickets = []
-        top_horses = race.get_top_predicted(1 + num_partners)
+        top_horses = race.get_top_predicted_safe(1 + num_partners)
+        if top_horses is None:
+            return []  # 予測順位に重複があるためスキップ
         
+        tickets = []
         if len(top_horses) < 3:
             return []
         
@@ -349,9 +363,11 @@ class WheelQuinellaStrategy(Strategy):
         num_axis = self._get_param("num_axis", 1)
         exclude_low_odds = self._get_param("exclude_low_odds", 0)  # 除外する低オッズ馬数
         
-        tickets = []
-        top_horses = race.get_top_predicted(num_axis)
+        top_horses = race.get_top_predicted_safe(num_axis)
+        if top_horses is None:
+            return []  # 予測順位に重複があるためスキップ
         
+        tickets = []
         if not top_horses:
             return []
         
@@ -388,9 +404,12 @@ class FormationTrioStrategy(Strategy):
         second_n = self._get_param("second_n", 4)  # 2列目の頭数
         third_n = self._get_param("third_n", 6)  # 3列目の頭数
         
-        tickets = []
-        top_horses = race.get_top_predicted(max(first_n, second_n, third_n))
+        max_n = max(first_n, second_n, third_n)
+        top_horses = race.get_top_predicted_safe(max_n)
+        if top_horses is None:
+            return []  # 予測順位に重複があるためスキップ
         
+        tickets = []
         if len(top_horses) < 3:
             return []
         

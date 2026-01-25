@@ -84,7 +84,8 @@ class BetEvaluator:
         result_numbers = set(payouts.quinella_horses)
         
         if ticket_numbers == result_numbers:
-            payout = int(ticket.amount * payouts.quinella_payout / 100)
+            # オッズは倍率形式（11.7 = 11.7倍）
+            payout = int(ticket.amount * payouts.quinella_payout)
             return True, payout
         
         return False, 0
@@ -101,7 +102,8 @@ class BetEvaluator:
         for i, wide_pair in enumerate(payouts.wide_pairs):
             if ticket_numbers == set(wide_pair):
                 if i < len(payouts.wide_payouts):
-                    payout = int(ticket.amount * payouts.wide_payouts[i] / 100)
+                    # オッズは倍率形式（4.2 = 4.2倍）
+                    payout = int(ticket.amount * payouts.wide_payouts[i])
                     return True, payout
         
         return False, 0
@@ -116,7 +118,8 @@ class BetEvaluator:
         result_numbers = set(payouts.trio_horses)
         
         if ticket_numbers == result_numbers:
-            payout = int(ticket.amount * payouts.trio_payout / 100)
+            # オッズは倍率形式（11.5 = 11.5倍）
+            payout = int(ticket.amount * payouts.trio_payout)
             return True, payout
         
         return False, 0

@@ -72,11 +72,20 @@ def _render_simulation_settings():
     # 戦略設定
     st.markdown("### 戦略設定")
     
-    strategy_name = st.selectbox(
+    # 戦略一覧を取得（日本語説明のみ表示）
+    strategies = StrategyFactory.list_strategies()
+    # description -> name のマッピングを作成
+    description_to_name = {s["description"]: s["name"] for s in strategies}
+    strategy_descriptions = [s["description"] for s in strategies]
+    
+    selected_description = st.selectbox(
         "戦略",
-        StrategyFactory.list_strategies(),
+        strategy_descriptions,
         help="使用する賭け戦略を選択",
     )
+    
+    # 選択された説明からnameを取得
+    strategy_name = description_to_name.get(selected_description, "favorite_win")
     
     # 戦略別パラメータ
     strategy_params = _get_strategy_params(strategy_name)
@@ -86,11 +95,19 @@ def _render_simulation_settings():
     # 資金管理設定
     st.markdown("### 資金管理設定")
     
-    fund_method = st.selectbox(
+    fund_manager_options = {
+        "定額方式": "fixed",
+        "ケリー基準": "kelly",
+        "定率方式": "percentage",
+    }
+    
+    selected_fund_label = st.selectbox(
         "資金管理方式",
-        ["fixed", "kelly", "percentage"],
+        list(fund_manager_options.keys()),
         help="賭け金の決定方式",
     )
+    
+    fund_method = fund_manager_options[selected_fund_label]
     
     fund_params = _get_fund_params(fund_method)
     
@@ -116,8 +133,10 @@ def _render_simulation_settings():
             st.error("❌ データを先に読み込んでください")
             return
         
+        # 設定をSimulationConfigに保存
         config = SimulationConfig(
             initial_fund=initial_fund,
+            bankruptcy_ratio=bankruptcy_line / 100,  # パーセントを小数に変換
             strategy_name=strategy_name,
             strategy_params=strategy_params,
             fund_manager_name=fund_method,
@@ -127,16 +146,23 @@ def _render_simulation_settings():
         
         with st.spinner("シミュレーション実行中..."):
             try:
-                strategy = StrategyFactory.create(strategy_name, **strategy_params)
-                fund_manager = FundManagerFactory.create(fund_method, **fund_params)
+                # 戦略作成
+                strategy = StrategyFactory.create(strategy_name, strategy_params)
                 
+                # 資金管理作成
+                fund_manager = FundManagerFactory.create(fund_method, fund_params)
+                
+                # シミュレーションエンジン作成
                 engine = SimulationEngine(
                     strategy=strategy,
                     fund_manager=fund_manager,
-                    initial_fund=initial_fund,
                 )
                 
-                result = engine.run(races)
+                # 破産ラインを計算（初期資金 × 破産ライン%）
+                bankruptcy_threshold = int(initial_fund * config.bankruptcy_ratio)
+                
+                # シミュレーション実行
+                result = engine.run_simple(races, initial_fund, bankruptcy_threshold)
                 st.session_state.result = result
                 
                 st.success(f"✅ シミュレーション完了！最終資金: ¥{result.final_fund:,}")
@@ -152,7 +178,7 @@ def _render_simulation_settings():
                         st.metric("利益", f"¥{result.metrics.profit:+,}")
                 
             except Exception as e:
-                st.error(f"❌ エラー: {e}")
+                st.error(f"❌ シミュレーションエラー: {e}")
 
 
 def _get_strategy_params(strategy_name: str) -> dict:
@@ -174,20 +200,20 @@ def _get_strategy_params(strategy_name: str) -> dict:
             params["max_tickets"] = st.slider("最大馬券数", 1, 10, 3)
     
     elif strategy_name == "box_quinella":
-        params["top_n"] = st.slider("上位N頭（馬連ボックス）", 2, 5, 3)
+        params["box_size"] = st.slider("上位N頭（馬連ボックス）", 2, 5, 3)
     
     elif strategy_name == "wheel_quinella":
         col1, col2 = st.columns(2)
         with col1:
-            params["axis_n"] = st.slider("軸馬数", 1, 3, 1)
+            params["num_axis"] = st.slider("軸馬数", 1, 3, 1)
         with col2:
-            params["partner_n"] = st.slider("相手馬数", 2, 10, 5)
+            params["num_partners"] = st.slider("相手馬数", 2, 10, 5)
     
     elif strategy_name == "box_wide":
-        params["top_n"] = st.slider("上位N頭（ワイドボックス）", 2, 5, 3)
+        params["box_size"] = st.slider("上位N頭（ワイドボックス）", 2, 5, 3)
     
     elif strategy_name == "box_trio":
-        params["top_n"] = st.slider("上位N頭（3連複ボックス）", 3, 6, 4)
+        params["box_size"] = st.slider("上位N頭（3連複ボックス）", 3, 6, 4)
     
     return params
 

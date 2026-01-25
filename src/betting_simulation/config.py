@@ -18,6 +18,7 @@ class SimulationConfig:
     """シミュレーション設定"""
     # 基本設定
     initial_fund: int = 100000
+    bankruptcy_ratio: float = 0.01  # 破産ライン（初期資金に対する割合）0.01 = 1%
     
     # データソース
     data_path: str = ""
@@ -49,6 +50,7 @@ class SimulationConfig:
         
         # 基本設定
         config.initial_fund = data.get("initial_fund", 100000)
+        config.bankruptcy_ratio = data.get("bankruptcy_ratio", 0.01)
         config.data_path = data.get("data_path", "")
         
         # フィルター条件
@@ -95,6 +97,7 @@ class SimulationConfig:
         """辞書に変換"""
         return {
             "initial_fund": self.initial_fund,
+            "bankruptcy_ratio": self.bankruptcy_ratio,
             "data_path": self.data_path,
             "filter": {
                 "tracks": self.filter_condition.tracks,

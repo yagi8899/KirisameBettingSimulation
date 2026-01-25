@@ -173,7 +173,8 @@ class SimulationEngine:
     def run_simple(
         self, 
         races: list[Race], 
-        initial_fund: int
+        initial_fund: int,
+        bankruptcy_threshold: int | None = None
     ) -> SimulationResult:
         """シンプルシミュレーションを実行
         
@@ -182,10 +183,15 @@ class SimulationEngine:
         Args:
             races: レースリスト
             initial_fund: 初期資金
+            bankruptcy_threshold: 破産ライン（この金額を下回ったら停止）
             
         Returns:
             シミュレーション結果
         """
+        # 破産ラインの決定（指定がなければ最小賭け金を使用）
+        if bankruptcy_threshold is None:
+            bankruptcy_threshold = self.fund_manager.constraints.min_bet
+        
         current_fund = initial_fund
         bet_history: list[BetRecord] = []
         fund_history: list[int] = [initial_fund]
@@ -234,11 +240,11 @@ class SimulationEngine:
                 self.fund_manager.set_fund(current_fund)
                 
                 # 破産チェック
-                if current_fund < self.fund_manager.constraints.min_bet:
-                    logger.warning("Bankruptcy! Stopping simulation.")
+                if current_fund < bankruptcy_threshold:
+                    logger.warning(f"Bankruptcy! Fund {current_fund} < threshold {bankruptcy_threshold}. Stopping simulation.")
                     break
             
-            if current_fund < self.fund_manager.constraints.min_bet:
+            if current_fund < bankruptcy_threshold:
                 break
         
         # 結果作成
@@ -259,7 +265,8 @@ class SimulationEngine:
         races: list[Race],
         initial_fund: int,
         num_trials: int = 10000,
-        random_seed: Optional[int] = None
+        random_seed: Optional[int] = None,
+        bankruptcy_threshold: int | None = None
     ) -> MonteCarloResult:
         """モンテカルロシミュレーションを実行
         
@@ -270,6 +277,7 @@ class SimulationEngine:
             initial_fund: 初期資金
             num_trials: 試行回数
             random_seed: 乱数シード（再現性用）
+            bankruptcy_threshold: 破産ライン（この金額を下回ったら停止）
             
         Returns:
             モンテカルロ結果
@@ -286,7 +294,7 @@ class SimulationEngine:
             random.shuffle(shuffled_races)
             
             # シミュレーション実行
-            result = self.run_simple(shuffled_races, initial_fund)
+            result = self.run_simple(shuffled_races, initial_fund, bankruptcy_threshold)
             final_funds.append(result.final_fund)
             
             if (trial + 1) % 1000 == 0:
@@ -312,8 +320,9 @@ class SimulationEngine:
         mc_result.percentile_95 = float(np.percentile(funds_array, 95))
         
         # 破産率・利益率
-        bankruptcy_threshold = initial_fund * 0.1  # 10%以下を破産とみなす
-        mc_result.bankruptcy_rate = float(np.sum(funds_array < bankruptcy_threshold) / num_trials * 100)
+        # bankruptcy_thresholdが指定されていなければ初期資金の10%をデフォルトとする
+        actual_bankruptcy_threshold = bankruptcy_threshold if bankruptcy_threshold else int(initial_fund * 0.1)
+        mc_result.bankruptcy_rate = float(np.sum(funds_array <= actual_bankruptcy_threshold) / num_trials * 100)
         mc_result.profit_rate = float(np.sum(funds_array > initial_fund) / num_trials * 100)
         
         return mc_result
